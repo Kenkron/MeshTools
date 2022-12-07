@@ -24,21 +24,23 @@ impl eframe::App for AppState {
                 });
             });
             if let Some(mesh) = &mut self.mesh {
-                {
-                    let mut mesh = mesh.lock().unwrap();
-                    ui.horizontal(|ui| {
-                        ui.color_edit_button_rgb(&mut mesh.ambient);
+                ui.horizontal_centered(|ui| {
+                    ui.vertical(|ui| {
+                        let mut mesh = mesh.lock().unwrap();
+                        ui.toggle_value(&mut mesh.right_handed, "right handed");
+                        ui.collapsing("Lighting", |ui| {
+                            ui.label("Ambient: ");
+                            ui.color_edit_button_rgb(&mut mesh.ambient);
+                            ui.label("Diffuse: ");
+                            ui.color_edit_button_rgb(&mut mesh.diffuse);
+                            ui.label("Specular: ");
+                            ui.color_edit_button_rgb(&mut mesh.specular);
+                        });
                     });
-                    ui.horizontal(|ui| {
-                        ui.color_edit_button_rgb(&mut mesh.diffuse);
-                    });
-                    ui.horizontal(|ui| {
-                        ui.color_edit_button_rgb(&mut mesh.specular);
-                    });
-                }
-                let max_size = f32::min(ui.available_height(), ui.available_width());
-                let size = egui::Vec2::new(max_size, max_size);
-                ui.add(MeshView::new(size, mesh.to_owned()));
+                    let max_size = f32::max(ui.available_height(), ui.available_width());
+                    let size = egui::Vec2::new(max_size, max_size);
+                    ui.add(MeshView::new(size, mesh.to_owned()));
+                });
             }
         });
     }
@@ -67,9 +69,9 @@ impl AppState {
 
 fn main() {
     let mut options = eframe::NativeOptions::default();
-    options.initial_window_size = Some(egui::vec2(500., 600.));
+    options.initial_window_size = Some(egui::vec2(800., 600.));
     eframe::run_native(
-        "Heightmap To STL",
+        "Mesh Tools",
         options,
         Box::new(|cc|
             Box::new(AppState::new(cc.gl.to_owned().expect("Could not get gl context"))))
