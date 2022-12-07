@@ -239,8 +239,12 @@ impl RenderableMesh {
     /// Combines the transformations (translation, scale, rotatioin)
     /// into a single transformation matrix.
     pub fn combine_transformations(&self) -> Mat4 {
-        // TODO: clean this up
-        return self.rotation * glm::translate(&glm::scale(&Mat4::identity(), &Vec3::new(self.scale, self.scale, self.scale)), &self.translation);
+        let scale_vec = Vec3::new(self.scale, self.scale, self.scale);
+        let scale = glm::scale(&Mat4::identity(),&scale_vec);
+        let translation = glm::translate(&Mat4::identity(), &self.translation);
+        return
+            self.rotation * scale * translation;
+
     }
 
     /// Renders the mesh to its glow::Context using its combined transformations
