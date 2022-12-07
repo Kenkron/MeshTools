@@ -17,7 +17,7 @@ fn write_vec3(file: &mut File, vector: &Vec3)
 /// The normal is set based on the triangle vertices.
 /// Gives no data (0x00...) for header and attributes.
 pub fn write_stl_binary(
-    path: String,
+    path: &str,
     triangles: &Vec::<Triangle>)
 -> Result<(), std::io::Error> {
     let mut output = File::create(path)?;

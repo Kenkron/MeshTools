@@ -184,15 +184,15 @@ impl RenderableMesh {
     ///
     /// This function creates buffers and shaders for the gl context,
     /// which are cleaned up when the RenderableMesh is dropped.
-    pub fn new(gl: Arc<glow::Context>, triangles: Vec::<Triangle>) -> Result<Self, String> {
+    pub fn new(gl: Arc<glow::Context>, triangles: &Vec::<Triangle>) -> Result<Self, String> {
         use glow::HasContext as _;
         let mut triangle_vertices = Vec::<f32>::new();
-        for &t in &triangles {
+        for t in triangles {
             // Only add triangles with non-zero area
             let cross_product = glm::cross(&(t[1] - t[0]), &(t[2] - t[0]));
             if glm::dot(&cross_product, &cross_product) > 0.0 {
                 let normal = cross_product.normalize();
-                for &v in &t {
+                for v in t {
                     triangle_vertices.append(&mut vec![v.x, v.y, v.z]);
                     triangle_vertices.append(&mut vec![normal.x, normal.y, normal.z]);
                 }
@@ -240,26 +240,7 @@ impl RenderableMesh {
     /// into a single transformation matrix.
     pub fn combine_transformations(&self) -> Mat4 {
         // TODO: clean this up
-        let scaling = Mat4::new(
-            self.scale, 0., 0., 0.,
-            0., self.scale, 0., 0.,
-            0., 0., self.scale, 0.,
-            0., 0., 0., 1.0);
-        let translating = Mat4::new(
-            1., 0., 0., self.translation[0],
-            0., 1., 0., self.translation[1],
-            0., 0., 1., self.translation[2],
-            0., 0., 0., 1.);
-        if self.right_handed {
-            let right_handed = Mat4::new(
-                1., 0., 0., 0.,
-                0., 1., 0., 0.,
-                0., 0., 1., 0.,
-                0., 0., 0., 1.);
-            return right_handed * self.rotation * scaling * translating;
-        } else {
-            return self.rotation * scaling * translating;
-        }
+        return self.rotation * glm::translate(&glm::scale(&Mat4::identity(), &Vec3::new(self.scale, self.scale, self.scale)), &self.translation);
     }
 
     /// Renders the mesh to its glow::Context using its combined transformations
@@ -271,7 +252,11 @@ impl RenderableMesh {
         let transformation = transformation_matrix.as_slice().to_owned();
         unsafe {
             self.gl.enable(glow::DEPTH_TEST);
-            self.gl.depth_range_f32(1., -1.);
+            if self.right_handed {
+                self.gl.depth_range_f32(1., -1.);
+            } else {
+                self.gl.depth_range_f32(-1., 1.);
+            }
             self.gl.clear(glow::DEPTH_BUFFER_BIT);
             self.gl.use_program(Some(self.shader_program));
             self.gl.uniform_matrix_4_f32_slice(
