@@ -5,7 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use eframe;
 use eframe::glow;
-use egui::Ui;
+use egui::{Ui, TextureHandle};
+use image;
 use mesh_view::*;
 mod mesh_view;
 extern crate nalgebra_glm as glm;
@@ -15,23 +16,30 @@ struct AppState {
     gl: Arc<glow::Context>,
     alert: Option<Arc<Mutex<String>>>,
     triangles: Option<Vec<Triangle>>,
-    mesh: Option<Arc<Mutex<RenderableMesh>>>
+    mesh: Option<Arc<Mutex<RenderableMesh>>>,
+    texture: Option<TextureHandle>
 }
 
 impl eframe::App for AppState {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            let mut render_flag = false;
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("Open").clicked() {
                         self.open_mesh_file();
                     }
-                    if ui.button("Save").clicked() {
-                        self.save_mesh_file(ui);
+                    if self.mesh.is_some() {
+                        if ui.button("Save").clicked() {
+                            self.save_mesh_file_menu(ui);
+                        }
+                        if ui.button("Save Render").clicked() {
+                            render_flag = true;
+                        }
                     }
                 });
             });
-            if let Some(mesh) = &mut self.mesh {
+            if let Some(mesh) = &mut self.mesh.to_owned() {
                 ui.horizontal_centered(|ui| {
                     ui.vertical(|ui| {
                         let mut mesh = mesh.lock().unwrap();
@@ -58,11 +66,25 @@ impl eframe::App for AppState {
                             light_pitch = light_pitch.clamp(-PI/2., PI/2.);
                             mesh.light_direction = -glm::Vec3::new(light_yaw.cos() * light_pitch.cos(), light_yaw.sin() * light_pitch.cos(), light_pitch.sin());
                         });
+                        if ui.button("Screenshot").clicked() {
+                            self.texture = Some(
+                                ui.ctx().load_texture(
+                                    "screenshot",
+                                    mesh.draw_image(200,200).unwrap(),
+                                    Default::default())
+                            );
+                        }
+                        if render_flag {
+                            self.save_render(&mesh.draw_pixels(200,200).unwrap(), 200, 200);
+                        }
+                        if let Some(texture) = &self.texture {
+                            ui.image(texture, texture.size_vec2());
+                        }
                     });
                     let max_size = f32::max(ui.available_height(), ui.available_width());
-                    let size = egui::Vec2::new(max_size, max_size);
+                    let size = egui::Vec2::new(200., 200.);
                     ui.add(MeshView::new(size, mesh.to_owned()));
-                });
+                 });
             }
             if let Some(alert) = self.alert.clone() {
                 egui::Window::new("Alert")
@@ -89,7 +111,8 @@ impl AppState {
             gl: gl,
             alert: None,
             triangles: None,
-            mesh: None
+            mesh: None,
+            texture: None
         }
     }
     fn show_alert(&mut self, alert: String) {
@@ -111,7 +134,7 @@ impl AppState {
             }
         }
     }
-    fn save_mesh_file(&mut self, ui: &mut Ui) {
+    fn save_mesh_file_menu(&mut self, ui: &mut Ui) {
         if let Some(triangles) = &self.triangles {
             if let Some(rfd_result) = rfd::FileDialog::new().add_filter("stl", &["stl", "STL"]).save_file() {
                 let save_file = rfd_result.display().to_string();
@@ -126,6 +149,24 @@ impl AppState {
             }
         } else {
             self.show_alert("There is no triangle data to save".to_string());
+        }
+    }
+    fn save_render(&mut self, pixels: &Vec<u8>, width: usize, height: usize) {
+        if let Some(rfd_result) = rfd::FileDialog::new().add_filter("png", &["png", "PNG"]).save_file() {
+            let save_file = rfd_result.display().to_string();
+            match image::save_buffer(
+                save_file.to_owned(),
+                pixels.as_slice(),
+                width as u32,
+                height as u32,
+                image::ColorType::Rgba8) {
+                Err(err) => {
+                    self.show_alert(format!("Could not save mesh:\n\t{}", err));
+                },
+                Ok(_) => {
+                    self.show_alert(format!("Saved: {}", save_file));
+                }
+            }
         }
     }
 }

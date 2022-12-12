@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
-use egui::Widget;
-extern crate nalgebra_glm as glm;
 use bytemuck;
-use eframe::egui_glow;
+use eframe::{egui_glow, glow::HasContext};
+use egui::{Widget, ColorImage};
 use egui_glow::glow;
+extern crate nalgebra_glm as glm;
 use glm::{Vec3, Mat4};
 
 pub type Triangle = [Vec3; 3];
@@ -220,7 +220,7 @@ impl RenderableMesh {
 
             return Ok(Self {
                 scale: 1.,
-                translation: Vec3::new(0., 0., 0.),
+                translation: -get_center(triangles),
                 rotation: Mat4::identity(),
                 right_handed: true,
                 light_direction: Vec3::new(-1.0, -1.0, -1.0),
@@ -284,24 +284,99 @@ impl RenderableMesh {
             self.gl.draw_arrays(glow::TRIANGLES, 0, self.get_triangle_count() as i32 * 3);
         }
     }
+    pub fn draw_pixels(&self, width: usize, height: usize) -> Result<Vec<u8>, String> {
+        unsafe {
+            let framebuffer  = self.gl.create_framebuffer()?;
+            self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
+            let gl_texture = self.gl.create_texture()?;
+            self.gl.bind_texture(glow::TEXTURE_2D, Some(gl_texture));
+            self.gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA as i32, width as i32, height as i32, 0, glow::RGBA, glow::UNSIGNED_BYTE, None);
+            self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::NEAREST as i32);
+            self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::NEAREST as i32);
+            let depth_buffer = self.gl.create_renderbuffer()?;
+            self.gl.bind_renderbuffer(glow::RENDERBUFFER, Some(depth_buffer));
+            self.gl.renderbuffer_storage(glow::RENDERBUFFER, glow::DEPTH_COMPONENT, width as i32, height as i32);
+            self.gl.framebuffer_renderbuffer(glow::FRAMEBUFFER, glow::DEPTH_ATTACHMENT, glow::RENDERBUFFER, Some(depth_buffer));
+            self.gl.framebuffer_texture(glow::FRAMEBUFFER, glow::COLOR_ATTACHMENT0, Some(gl_texture), 0);
+            self.gl.draw_buffer(glow::COLOR_ATTACHMENT0);
+
+            self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
+            self.gl.viewport(0, 0, width as i32, height as i32);
+            self.gl.clear_color(0.0, 0.0, 0.0, 0.0);
+            self.draw();
+            self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+
+            let mut buffer = vec![0 as u8; (width * height * 4) as usize];
+            self.gl.get_tex_image(
+                glow::TEXTURE_2D,
+                0,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelPackData::Slice(buffer.as_mut_slice()));
+            let mut flipped_buffer = vec![0 as u8; (width * height * 4) as usize];
+            for x in 0..width as usize{
+                for y in 0..height as usize{
+                    let i1 = (x + width * y) * 4;
+                    let i2 = (x + width * ((height - 1) - y)) * 4;
+                    flipped_buffer[i1] = buffer[i2];
+                    flipped_buffer[i1 + 1] = buffer[i2 + 1];
+                    flipped_buffer[i1 + 2] = buffer[i2 + 2];
+                    flipped_buffer[i1 + 3] = buffer[i2 + 3];
+                }
+            }
+
+            self.gl.delete_framebuffer(framebuffer);
+            self.gl.delete_texture(gl_texture);
+            self.gl.delete_renderbuffer(depth_buffer);
+
+            return Ok(flipped_buffer);
+        }
+    }
+    pub fn draw_image(&self, width: usize, height: usize) -> Result<ColorImage, String> {
+        let pixel_data = self.draw_pixels(width, height)?;
+        return Ok(ColorImage::from_rgba_unmultiplied([width, height], &pixel_data));
+    }
     /// Reference to the glow::Context used to create this mesh's buffers and shaders
+    #[allow(dead_code)]
     pub fn get_gl(&self) -> Arc<glow::Context> {
         return self.gl.to_owned();}
     /// The number of triangles in the vertex buffer
+    #[allow(dead_code)]
     pub fn get_triangle_count(&self) -> usize{
         return self.triangle_count;}
     /// Sets the rotation matrix back to the identity matrix
+    #[allow(dead_code)]
     pub fn reset_rotation(&mut self) {
         self.rotation = Mat4::identity();}
     /// Rotate around the x axis (relative to the model's current rotation)
+    #[allow(dead_code)]
     pub fn rotate_x(&mut self, radians: f32) {
         self.rotation = glm::rotate_x(&self.rotation, radians);}
     /// Rotate around the y axis (relative to the model's current rotation)
+    #[allow(dead_code)]
     pub fn rotate_y(&mut self, radians: f32) {
         self.rotation = glm::rotate_y(&self.rotation, radians);}
     /// Rotate around the z axis (relative to the model's current rotation)
+    #[allow(dead_code)]
     pub fn rotate_z(&mut self, radians: f32) {
         self.rotation = glm::rotate_z(&self.rotation, radians);}
+}
+
+fn get_center(mesh: &Vec<Triangle>) -> Vec3{
+    if mesh.len() == 0 {
+        return Vec3::new(0.,0.,0.);
+    }
+    let mut min_vec = mesh[0][0];
+    let mut max_vec = mesh[0][0];
+    for triangle in mesh {
+        for vertex in triangle {
+            for i in 0..vertex.len() {
+                min_vec[i] = f32::min(min_vec[i], vertex[i]);
+                max_vec[i] = f32::max(min_vec[i], vertex[i]);
+            }
+        }
+    }
+    return (min_vec + max_vec) / 2.0;
 }
 
 impl Drop for RenderableMesh {
