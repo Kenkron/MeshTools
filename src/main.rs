@@ -67,10 +67,13 @@ impl eframe::App for AppState {
                             mesh.light_direction = -glm::Vec3::new(light_yaw.cos() * light_pitch.cos(), light_yaw.sin() * light_pitch.cos(), light_pitch.sin());
                         });
                         if ui.button("Screenshot").clicked() {
+                            let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                                [200,200],
+                                &mesh.draw_pixels(200,200).unwrap());
                             self.texture = Some(
                                 ui.ctx().load_texture(
                                     "screenshot",
-                                    mesh.draw_image(200,200).unwrap(),
+                                    color_image,
                                     Default::default())
                             );
                         }

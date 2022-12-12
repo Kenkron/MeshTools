@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use bytemuck;
 use eframe::{egui_glow, glow::HasContext};
-use egui::{Widget, ColorImage};
+use egui::Widget;
 use egui_glow::glow;
 extern crate nalgebra_glm as glm;
 use glm::{Vec3, Mat4};
@@ -284,13 +284,14 @@ impl RenderableMesh {
             self.gl.draw_arrays(glow::TRIANGLES, 0, self.get_triangle_count() as i32 * 3);
         }
     }
+    /// Draws the model to an RGBA pixel buffer
     pub fn draw_pixels(&self, width: usize, height: usize) -> Result<Vec<u8>, String> {
         unsafe {
             let framebuffer  = self.gl.create_framebuffer()?;
             self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
             let gl_texture = self.gl.create_texture()?;
             self.gl.bind_texture(glow::TEXTURE_2D, Some(gl_texture));
-            self.gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA as i32, width as i32, height as i32, 0, glow::RGBA, glow::UNSIGNED_BYTE, None);
+            self.gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::SRGB8_ALPHA8 as i32, width as i32, height as i32, 0, glow::RGBA, glow::UNSIGNED_BYTE, None);
             self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::NEAREST as i32);
             self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::NEAREST as i32);
             let depth_buffer = self.gl.create_renderbuffer()?;
@@ -303,6 +304,7 @@ impl RenderableMesh {
             self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
             self.gl.viewport(0, 0, width as i32, height as i32);
             self.gl.clear_color(0.0, 0.0, 0.0, 0.0);
+            self.gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
             self.draw();
             self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
 
@@ -322,6 +324,10 @@ impl RenderableMesh {
                     flipped_buffer[i1 + 1] = buffer[i2 + 1];
                     flipped_buffer[i1 + 2] = buffer[i2 + 2];
                     flipped_buffer[i1 + 3] = buffer[i2 + 3];
+                    // flipped_buffer[i1] = ((buffer[i2] as f32 / 255.).sqrt() * 255.).round() as u8;
+                    // flipped_buffer[i1 + 1] = ((buffer[i2 + 1] as f32 / 255.).sqrt() * 255.).round() as u8;
+                    // flipped_buffer[i1 + 2] = ((buffer[i2 + 2] as f32 / 255.).sqrt() * 255.).round() as u8;
+                    // flipped_buffer[i1 + 3] = ((buffer[i2 + 3] as f32 / 255.).sqrt() * 255.).round() as u8;
                 }
             }
 
@@ -331,10 +337,6 @@ impl RenderableMesh {
 
             return Ok(flipped_buffer);
         }
-    }
-    pub fn draw_image(&self, width: usize, height: usize) -> Result<ColorImage, String> {
-        let pixel_data = self.draw_pixels(width, height)?;
-        return Ok(ColorImage::from_rgba_unmultiplied([width, height], &pixel_data));
     }
     /// Reference to the glow::Context used to create this mesh's buffers and shaders
     #[allow(dead_code)]
