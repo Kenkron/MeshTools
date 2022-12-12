@@ -77,15 +77,17 @@ impl eframe::App for AppState {
                                     Default::default())
                             );
                         }
-                        if render_flag {
-                            self.save_render(&mesh.draw_pixels(200,200).unwrap(), 200, 200);
-                        }
                         if let Some(texture) = &self.texture {
                             ui.image(texture, texture.size_vec2());
                         }
                     });
-                    let max_size = f32::max(ui.available_height(), ui.available_width());
-                    let size = egui::Vec2::new(200., 200.);
+                    let size = egui::Vec2::new(ui.available_width(), ui.available_height());
+                    if render_flag {
+                        let mesh = mesh.lock().unwrap();
+                        self.save_render(
+                            &mesh.draw_pixels(size.x as usize, size.y as usize).unwrap(),
+                            size.x as usize, size.y as usize);
+                    }
                     ui.add(MeshView::new(size, mesh.to_owned()));
                  });
             }

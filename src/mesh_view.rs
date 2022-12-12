@@ -17,10 +17,12 @@ uniform vec3 light_direction;
 uniform vec3 ambient;
 uniform vec3 diffuse;
 uniform vec3 specular;
+uniform float aspect_ratio;
 out vec3 v_color;
 void main() {
     // Position
     gl_Position = u_transformation * vec4(a_pos.x, a_pos.y, a_pos.z , 1.0);
+    gl_Position.x /= aspect_ratio;
     gl_Position.z *= 0.001;
 
     // Color
@@ -113,6 +115,7 @@ impl Widget for MeshView {
             return response;
         }
 
+        let aspect_ratio = self.view_size.x/self.view_size.y;
         {
             let mut mesh = self.mesh.lock().unwrap();
 
@@ -124,7 +127,7 @@ impl Widget for MeshView {
                 let matrix = mesh.combine_transformations();
                 if let Some(inverse_matrix) = matrix.try_inverse() {
                     let delta4 = inverse_matrix * glm::Vec4::new(
-                        2. * response.drag_delta().x / self.view_size.x,
+                        aspect_ratio * 2. * response.drag_delta().x / self.view_size.x,
                         -2. * response.drag_delta().y / self.view_size.y,
                         0., 0.);
                     mesh.translation += Vec3::new(delta4.x, delta4.y, delta4.z);
@@ -136,7 +139,7 @@ impl Widget for MeshView {
         }
 
         let cb = egui_glow::CallbackFn::new(move |_info, _painter| {
-            self.mesh.lock().unwrap().draw();
+            self.mesh.lock().unwrap().draw(aspect_ratio);
         });
 
         if ui.is_rect_visible(rect) {
@@ -250,7 +253,7 @@ impl RenderableMesh {
     /// Renders the mesh to its glow::Context using its combined transformations
     /// As side effects, this enables the depth test, clears and uses the depth buffer,
     /// and sets the shader program to that of the Renderable Mesh
-    pub fn draw(&self) {
+    pub fn draw(&self, aspect_ratio: f32) {
         use glow::HasContext as _;
         let transformation_matrix = self.combine_transformations();
         let transformation = transformation_matrix.as_slice().to_owned();
@@ -280,6 +283,9 @@ impl RenderableMesh {
             self.gl.uniform_3_f32_slice(
                 self.gl.get_uniform_location(self.shader_program, "specular").as_ref(),
                 self.specular.as_slice());
+            self.gl.uniform_1_f32(
+                self.gl.get_uniform_location(self.shader_program, "aspect_ratio").as_ref(),
+                aspect_ratio);
             self.gl.bind_vertex_array(Some(self.vertex_array));
             self.gl.draw_arrays(glow::TRIANGLES, 0, self.get_triangle_count() as i32 * 3);
         }
@@ -305,7 +311,7 @@ impl RenderableMesh {
             self.gl.viewport(0, 0, width as i32, height as i32);
             self.gl.clear_color(0.0, 0.0, 0.0, 0.0);
             self.gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
-            self.draw();
+            self.draw(width as f32/height as f32);
             self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
 
             let mut buffer = vec![0 as u8; (width * height * 4) as usize];
@@ -324,10 +330,6 @@ impl RenderableMesh {
                     flipped_buffer[i1 + 1] = buffer[i2 + 1];
                     flipped_buffer[i1 + 2] = buffer[i2 + 2];
                     flipped_buffer[i1 + 3] = buffer[i2 + 3];
-                    // flipped_buffer[i1] = ((buffer[i2] as f32 / 255.).sqrt() * 255.).round() as u8;
-                    // flipped_buffer[i1 + 1] = ((buffer[i2 + 1] as f32 / 255.).sqrt() * 255.).round() as u8;
-                    // flipped_buffer[i1 + 2] = ((buffer[i2 + 2] as f32 / 255.).sqrt() * 255.).round() as u8;
-                    // flipped_buffer[i1 + 3] = ((buffer[i2 + 3] as f32 / 255.).sqrt() * 255.).round() as u8;
                 }
             }
 
