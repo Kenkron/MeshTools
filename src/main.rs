@@ -7,8 +7,8 @@ use eframe;
 use eframe::glow;
 use egui::{Ui, TextureHandle};
 use image;
-use mesh_view::*;
-mod mesh_view;
+use mesh_widget::*;
+mod mesh_widget;
 extern crate nalgebra_glm as glm;
 mod triangle;
 
@@ -16,7 +16,7 @@ struct AppState {
     gl: Arc<glow::Context>,
     alert: Option<Arc<Mutex<String>>>,
     triangles: Option<Vec<Triangle>>,
-    mesh: Option<Arc<Mutex<RenderableMesh>>>,
+    mesh: Option<ViewState>,
     texture: Option<TextureHandle>
 }
 
@@ -39,10 +39,9 @@ impl eframe::App for AppState {
                     }
                 });
             });
-            if let Some(mesh) = &mut self.mesh.to_owned() {
+            if let Some(mesh) = &mut self.mesh {
                 ui.horizontal_centered(|ui| {
                     ui.vertical(|ui| {
-                        let mut mesh = mesh.lock().unwrap();
                         ui.toggle_value(&mut mesh.right_handed, "right handed");
                         ui.collapsing("Lighting", |ui| {
                             ui.label("Ambient: ");
@@ -83,12 +82,11 @@ impl eframe::App for AppState {
                     });
                     let size = egui::Vec2::new(ui.available_width(), ui.available_height());
                     if render_flag {
-                        let mesh = mesh.lock().unwrap();
                         self.save_render(
                             &mesh.draw_pixels(size.x as usize, size.y as usize).unwrap(),
                             size.x as usize, size.y as usize);
                     }
-                    ui.add(MeshView::new(size, mesh.to_owned()));
+                    ui.add(mesh_widget::mesh_view(size, mesh));
                  });
             }
             if let Some(alert) = self.alert.clone() {
@@ -132,9 +130,9 @@ impl AppState {
                     None
                 },
                 Ok(mesh) => {
-                    let renderable_mesh = RenderableMesh::new(self.gl.to_owned(), &mesh).unwrap();
+                    let mesh_view_state = ViewState::new(self.gl.to_owned(), &mesh).unwrap();
                     self.triangles = Some(mesh);
-                    Some(Arc::new(Mutex::new(renderable_mesh)))
+                    Some(mesh_view_state)
                 }
             }
         }
