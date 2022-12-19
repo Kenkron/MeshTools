@@ -48,6 +48,8 @@ fn mesh_ui(ui: &mut egui::Ui, view_size: egui::Vec2, state: &mut ViewState)
         }
     }
 
+    // Now that the state is updated, send a clone of it to the callback function.
+    let state = state.clone();
     let cb = egui_glow::CallbackFn::new(move |_info, _painter| {
         state.draw(aspect_ratio);
     });

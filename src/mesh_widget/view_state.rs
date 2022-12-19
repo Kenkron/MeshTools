@@ -9,7 +9,6 @@ use super::{GlowState, Triangle};
 
 /// All of the data required to display a triangle mesh.
 ///
-/// Automatically creates and destroys buffers and shaders.
 /// Provides scaling, translation, and rotation fields,
 /// as well as helper functions for rotation.
 pub struct ViewState {
@@ -60,7 +59,6 @@ impl ViewState {
         let translation = glm::translate(&Mat4::identity(), &self.translation);
         return
             self.rotation * scale * translation;
-
     }
 
     /// Renders the mesh to its glow::Context using its combined transformations
@@ -69,8 +67,8 @@ impl ViewState {
     pub fn draw(&self, aspect_ratio: f32) {
         let transformation_matrix = self.combine_transformations();
         let transformation = transformation_matrix.as_slice().to_owned();
-        let glow_state = self.glow_state;
-        let gl = glow_state.gl;
+        let glow_state = &self.glow_state;
+        let gl = &glow_state.gl;
         unsafe {
             gl.enable(glow::DEPTH_TEST);
             if self.right_handed {
@@ -106,8 +104,8 @@ impl ViewState {
     }
     /// Draws the model to an RGBA pixel buffer
     pub fn draw_pixels(&self, width: usize, height: usize) -> Result<Vec<u8>, String> {
-        let glow_state = self.glow_state;
-        let gl = glow_state.gl;
+        let glow_state = &self.glow_state;
+        let gl = &glow_state.gl;
         unsafe {
             let framebuffer  = gl.create_framebuffer()?;
             gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
@@ -180,6 +178,21 @@ impl ViewState {
     #[allow(dead_code)]
     pub fn rotate_z(&mut self, radians: f32) {
         self.rotation = glm::rotate_z(&self.rotation, radians);}
+}
+
+impl Clone for ViewState {
+    fn clone(&self) -> Self {
+        Self {
+            translation: self.translation.clone(),
+            scale: self.scale.clone(),
+            rotation: self.rotation.clone(),
+            right_handed: self.right_handed.clone(),
+            light_direction: self.light_direction.clone(),
+            ambient: self.ambient.clone(),
+            diffuse: self.diffuse.clone(),
+            specular: self.specular.clone(),
+            glow_state: self.glow_state.clone() }
+    }
 }
 
 fn get_center(mesh: &Vec<Triangle>) -> Vec3{
