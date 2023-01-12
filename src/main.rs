@@ -8,6 +8,7 @@ use eframe::glow;
 use egui::{TextureHandle, Ui};
 use mesh_widget::*;
 mod mesh_widget;
+mod rendering;
 extern crate nalgebra_glm as glm;
 mod triangle;
 
