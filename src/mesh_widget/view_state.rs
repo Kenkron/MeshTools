@@ -38,8 +38,13 @@ impl ViewState {
     /// This function creates buffers and shaders for the gl context,
     /// which are cleaned up when the RenderableMesh is dropped.
     pub fn new(gl: Arc<glow::Context>, triangles: &Vec::<Triangle>) -> Result<Self, String> {
+        let largest_dim = get_largest_dim(triangles);
+        let mut scale = 1.0;
+        if largest_dim != 0.0 {
+            scale = 1.0/largest_dim;
+        }
         return Ok(Self {
-            scale: 1.,
+            scale,
             translation: -get_center(triangles),
             rotation: Mat4::identity(),
             right_handed: true,
@@ -193,6 +198,24 @@ impl Clone for ViewState {
             specular: self.specular.clone(),
             glow_state: self.glow_state.clone() }
     }
+}
+
+fn get_largest_dim(mesh: &Vec<Triangle>) -> f32 {
+    if mesh.len() == 0 {
+        return 0.;
+    }
+    let mut min_vec = mesh[0][0];
+    let mut max_vec = mesh[0][0];
+    for triangle in mesh {
+        for vertex in triangle {
+            for i in 0..vertex.len() {
+                min_vec[i] = f32::min(min_vec[i], vertex[i]);
+                max_vec[i] = f32::max(min_vec[i], vertex[i]);
+            }
+        }
+    }
+    let size = max_vec - min_vec;
+    return f32::max(size[0], f32::max(size[1], size[2]));
 }
 
 fn get_center(mesh: &Vec<Triangle>) -> Vec3{

@@ -1150,18 +1150,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "meshtools"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "eframe",
- "egui",
- "image",
- "nalgebra-glm",
- "rfd",
-]
-
-[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1186,6 +1174,18 @@ dependencies = [
  "log",
  "wasi",
  "windows-sys 0.42.0",
+]
+
+[[package]]
+name = "mold2patient"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "eframe",
+ "egui",
+ "image",
+ "nalgebra-glm",
+ "rfd",
 ]
 
 [[package]]
