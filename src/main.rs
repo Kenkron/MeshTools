@@ -7,9 +7,11 @@ use eframe;
 use eframe::glow;
 use egui::{TextureHandle, Ui};
 use mesh_widget::*;
+use transformation_ui::TransformationUI;
 mod mesh_widget;
 extern crate nalgebra_glm as glm;
 mod triangle;
+mod transformation_ui;
 
 macro_rules! unwrap_or_return {
     ( $e:expr ) => {
@@ -25,7 +27,12 @@ struct AppState {
     alert: Option<Arc<Mutex<String>>>,
     triangles: Option<Vec<Triangle>>,
     mesh: Option<ViewState>,
-    texture: Option<TextureHandle>
+    texture: Option<TextureHandle>,
+    transformation_ui: transformation_ui::TransformationUI
+}
+
+fn new_alert(alert: String) -> Option<Arc<Mutex<String>>> {
+    Some(Arc::new(Mutex::new(alert)))
 }
 
 impl eframe::App for AppState {
@@ -47,6 +54,7 @@ impl eframe::App for AppState {
                     }
                 });
             });
+
             ui.horizontal_centered(|ui| {
                 self.show_controls(ui);
                 let size = egui::Vec2::new(ui.available_width(), ui.available_height());
@@ -54,6 +62,16 @@ impl eframe::App for AppState {
                     self.save_render(size.x as usize, size.y as usize);
                 }
                 if let Some(mesh) = &mut self.mesh {
+                    if self.transformation_ui.transformations.len() > 0 {
+                        if mesh.models.len() == 1 {
+                            mesh.models.push(mesh.models[0].clone());
+                        }
+                        if mesh.models.len() > 1 {
+                            mesh.models[1].1 = self.transformation_ui.get_matrix();
+                        }
+                    } else if mesh.models.len() > 1{
+                        mesh.models.pop();
+                    }
                     ui.add(mesh_widget::mesh_view(size, mesh));
                 }
             });
@@ -83,14 +101,16 @@ impl AppState {
             alert: None,
             triangles: None,
             mesh: None,
-            texture: None
+            texture: None,
+            transformation_ui: TransformationUI::new()
         }
     }
     fn show_controls(&mut self, ui: &mut Ui) {
-        if let Some(mesh) = &mut self.mesh {
+        if self.mesh.is_some() {
             ui.vertical(|ui| {
-                ui.toggle_value(&mut mesh.right_handed, "right handed");
+                ui.toggle_value(&mut self.mesh.as_mut().unwrap().right_handed, "right handed");
                 ui.collapsing("Lighting", |ui| {
+                    let mesh = self.mesh.as_mut().unwrap();
                     ui.label("Ambient: ");
                     ui.color_edit_button_rgb(&mut mesh.ambient);
                     ui.label("Diffuse: ");
@@ -115,10 +135,28 @@ impl AppState {
                         light_yaw.sin() * light_pitch.cos(),
                         light_pitch.sin());
                 });
+                ui.collapsing("Transformations", |ui| {
+                    self.transformation_ui.ui(ui);
+                    if let Some(triangles) = &self.triangles {
+                        if ui.button("Save Transformed Mesh").clicked() {
+                            if let Some(rfd_result) = rfd::FileDialog::new().add_filter("stl", &["stl", "STL"]).save_file() {
+                                let save_file = rfd_result.display().to_string();
+                                match triangle::write_transformed_stl_binary(&save_file.as_str(), triangles, &self.transformation_ui.get_matrix()) {
+                                    Err(err) => {
+                                        self.alert = new_alert(format!("Could not save mesh:\n\t{}", err));
+                                    },
+                                    Ok(_) => {
+                                        self.alert = new_alert(format!("Saved: {}", save_file));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
                 if ui.button("Screenshot").clicked() {
                     let color_image = egui::ColorImage::from_rgba_unmultiplied(
                         [200,200],
-                        &mesh.draw_pixels(200,200).unwrap());
+                        &self.mesh.as_ref().unwrap().draw_pixels(200,200).unwrap());
                     self.texture = Some(
                         ui.ctx().load_texture(
                             "screenshot",
@@ -132,15 +170,12 @@ impl AppState {
             });
         }
     }
-    fn show_alert(&mut self, alert: String) {
-        self.alert = Some(Arc::new(Mutex::new(alert)));
-    }
     fn open_mesh_file(&mut self) {
         if let Some(rfd_result) = rfd::FileDialog::new().pick_file() {
             let input_file = rfd_result.display().to_string();
             self.mesh = match triangle::read_stl_binary(input_file.as_str()) {
                 Err(_) => {
-                    self.show_alert(format!("Could not open file {}", input_file));
+                    self.alert = new_alert(format!("Could not open file {}", input_file));
                     None
                 },
                 Ok(mesh) => {
@@ -157,15 +192,15 @@ impl AppState {
                 let save_file = rfd_result.display().to_string();
                 match triangle::write_stl_binary(save_file.as_str(), &triangles) {
                     Err(err) => {
-                        self.show_alert(format!("Could not save mesh:\n\t{}", err));
+                        self.alert = new_alert(format!("Could not save mesh:\n\t{}", err));
                     },
                     Ok(_) => {
-                        self.show_alert(format!("Saved: {}", save_file));
+                        self.alert = new_alert(format!("Saved: {}", save_file));
                     }
                 }
             }
         } else {
-            self.show_alert("There is no triangle data to save".to_string());
+            self.alert = new_alert("There is no triangle data to save".to_string());
         }
     }
     fn save_render(&mut self, width: usize, height: usize) {
@@ -176,7 +211,7 @@ impl AppState {
         let pixels = match mesh.draw_pixels(width, height) {
             Ok(x) => {x},
             Err(err) => {
-                self.show_alert(format!("Could not render mesh:\n\t{}", err));
+                self.alert = new_alert(format!("Could not render mesh:\n\t{}", err));
                 return
             }
         };
@@ -187,10 +222,10 @@ impl AppState {
             height as u32,
             image::ColorType::Rgba8) {
             Err(err) => {
-                self.show_alert(format!("Could not save mesh:\n\t{}", err));
+                self.alert = new_alert(format!("Could not save mesh:\n\t{}", err));
             },
             Ok(_) => {
-                self.show_alert(format!("Saved: {}", save_file));
+                self.alert = new_alert(format!("Saved: {}", save_file));
             }
         }
     }
