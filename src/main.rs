@@ -3,6 +3,7 @@
 use std::f32::consts::PI;
 use std::sync::{Arc, Mutex};
 
+use analysis_ui::AnalysisUI;
 use eframe;
 use eframe::glow;
 use egui::{TextureHandle, Ui};
@@ -10,6 +11,10 @@ use mesh_widget::*;
 mod mesh_widget;
 extern crate nalgebra_glm as glm;
 mod triangle;
+mod transformation_ui;
+mod mesh;
+mod analysis_ui;
+mod thread_request;
 
 macro_rules! unwrap_or_return {
     ( $e:expr ) => {
@@ -25,7 +30,13 @@ struct AppState {
     alert: Option<Arc<Mutex<String>>>,
     triangles: Option<Vec<Triangle>>,
     mesh: Option<ViewState>,
-    texture: Option<TextureHandle>
+    texture: Option<TextureHandle>,
+    transformation_ui: transformation_ui::TransformationUI,
+    analysis_ui: analysis_ui::AnalysisUI
+}
+
+fn new_alert(alert: String) -> Option<Arc<Mutex<String>>> {
+    Some(Arc::new(Mutex::new(alert)))
 }
 
 impl eframe::App for AppState {
@@ -83,13 +94,51 @@ impl AppState {
             alert: None,
             triangles: None,
             mesh: None,
-            texture: None
+            texture: None,
+            transformation_ui: TransformationUI::new(),
+            analysis_ui: AnalysisUI::new(None)
         }
     }
     fn show_controls(&mut self, ui: &mut Ui) {
         if let Some(mesh) = &mut self.mesh {
             ui.vertical(|ui| {
                 ui.toggle_value(&mut mesh.right_handed, "right handed");
+                if ui.button("Screenshot").clicked() {
+                    let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                        [200,200],
+                        &self.mesh.as_ref().unwrap().draw_pixels(200,200).unwrap());
+                    self.texture = Some(
+                        ui.ctx().load_texture(
+                            "screenshot",
+                            color_image,
+                            Default::default())
+                    );
+                }
+                if let Some(texture) = &self.texture {
+                    ui.image(texture, texture.size_vec2());
+                }
+                ui.toggle_value(&mut self.mesh.as_mut().unwrap().right_handed, "right handed");
+                ui.collapsing("Statistics", |ui| {
+                    self.analysis_ui.ui(ui);
+                });
+                ui.collapsing("Transformations", |ui| {
+                    self.transformation_ui.ui(ui);
+                    if let Some(triangles) = &self.triangles {
+                        if ui.button("Save Transformed Mesh").clicked() {
+                            if let Some(rfd_result) = rfd::FileDialog::new().add_filter("stl", &["stl", "STL"]).save_file() {
+                                let save_file = rfd_result.display().to_string();
+                                match triangle::write_transformed_stl_binary(&save_file.as_str(), triangles, &self.transformation_ui.get_matrix()) {
+                                    Err(err) => {
+                                        self.alert = new_alert(format!("Could not save mesh:\n\t{}", err));
+                                    },
+                                    Ok(_) => {
+                                        self.alert = new_alert(format!("Saved: {}", save_file));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
                 ui.collapsing("Lighting", |ui| {
                     ui.label("Ambient: ");
                     ui.color_edit_button_rgb(&mut mesh.ambient);
@@ -115,20 +164,6 @@ impl AppState {
                         light_yaw.sin() * light_pitch.cos(),
                         light_pitch.sin());
                 });
-                if ui.button("Screenshot").clicked() {
-                    let color_image = egui::ColorImage::from_rgba_unmultiplied(
-                        [200,200],
-                        &mesh.draw_pixels(200,200).unwrap());
-                    self.texture = Some(
-                        ui.ctx().load_texture(
-                            "screenshot",
-                            color_image,
-                            Default::default())
-                    );
-                }
-                if let Some(texture) = &self.texture {
-                    ui.image(texture, texture.size_vec2());
-                }
             });
         }
     }
@@ -145,6 +180,7 @@ impl AppState {
                 },
                 Ok(mesh) => {
                     let mesh_view_state = ViewState::new(self.gl.to_owned(), &mesh).unwrap();
+                    self.analysis_ui = AnalysisUI::new(Some(&mesh));
                     self.triangles = Some(mesh);
                     Some(mesh_view_state)
                 }
