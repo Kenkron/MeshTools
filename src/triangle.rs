@@ -1,9 +1,13 @@
 use std::fs::File;
 use std::io::{Write, Read, BufReader};
 extern crate nalgebra_glm as glm;
-use glm::Vec3;
+use glm::{Vec3, Mat4};
 
 pub type Triangle = [Vec3; 3];
+
+pub fn transform(triangle: &Triangle, transformation: &Mat4) -> Triangle {
+    return triangle.map(|vector| transformation.transform_vector(&vector));
+}
 
 fn write_vec3(file: &mut File, vector: &Vec3)
 -> Result<(), std::io::Error>{
@@ -18,7 +22,7 @@ fn write_vec3(file: &mut File, vector: &Vec3)
 /// Gives no data (0x00...) for header and attributes.
 pub fn write_stl_binary(
     path: &str,
-    triangles: &Vec::<Triangle>)
+    triangles: &[Triangle])
 -> Result<(), std::io::Error> {
     let mut output = File::create(path)?;
     output.write_all(&[0 as u8; 80])?;
@@ -34,6 +38,21 @@ pub fn write_stl_binary(
         output.write(&[0 as u8; 2])?;
     }
     return Ok(());
+}
+
+/// Writes triangles to a binary stl file.
+/// The normal is set based on the triangle vertices.
+/// Gives no data (0x00...) for header and attributes.
+pub fn write_transformed_stl_binary(
+    path: &str,
+    triangles: &[Triangle],
+    transformation: &Mat4)
+-> Result<(), std::io::Error> {
+    let transformed_triangles: Vec<Triangle> =
+        triangles.iter()
+        .map(|t| {transform(t, &transformation)})
+        .collect();
+    return write_stl_binary(path, &transformed_triangles);
 }
 
 fn read_vec3(buffer: &mut BufReader<File>) -> Result<Vec3, std::io::Error> {
