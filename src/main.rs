@@ -8,6 +8,7 @@ use eframe;
 use eframe::glow;
 use egui::{TextureHandle, Ui};
 use mesh_widget::*;
+use transformation_ui::TransformationUI;
 mod mesh_widget;
 extern crate nalgebra_glm as glm;
 mod triangle;
@@ -58,6 +59,7 @@ impl eframe::App for AppState {
                     }
                 });
             });
+
             ui.horizontal_centered(|ui| {
                 self.show_controls(ui);
                 let size = egui::Vec2::new(ui.available_width(), ui.available_height());
@@ -65,6 +67,16 @@ impl eframe::App for AppState {
                     self.save_render(size.x as usize, size.y as usize);
                 }
                 if let Some(mesh) = &mut self.mesh {
+                    if self.transformation_ui.transformations.len() > 0 {
+                        if mesh.models.len() == 1 {
+                            mesh.models.push(mesh.models[0].clone());
+                        }
+                        if mesh.models.len() > 1 {
+                            mesh.models[1].1 = self.transformation_ui.get_matrix();
+                        }
+                    } else if mesh.models.len() > 1{
+                        mesh.models.pop();
+                    }
                     ui.add(mesh_widget::mesh_view(size, mesh));
                 }
             });
@@ -100,9 +112,9 @@ impl AppState {
         }
     }
     fn show_controls(&mut self, ui: &mut Ui) {
-        if let Some(mesh) = &mut self.mesh {
+        if self.mesh.is_some() {
             ui.vertical(|ui| {
-                ui.toggle_value(&mut mesh.right_handed, "right handed");
+                ui.toggle_value(&mut self.mesh.as_mut().unwrap().right_handed, "right handed");
                 if ui.button("Screenshot").clicked() {
                     let color_image = egui::ColorImage::from_rgba_unmultiplied(
                         [200,200],
@@ -117,7 +129,6 @@ impl AppState {
                 if let Some(texture) = &self.texture {
                     ui.image(texture, texture.size_vec2());
                 }
-                ui.toggle_value(&mut self.mesh.as_mut().unwrap().right_handed, "right handed");
                 ui.collapsing("Statistics", |ui| {
                     self.analysis_ui.ui(ui);
                 });
@@ -140,6 +151,7 @@ impl AppState {
                     }
                 });
                 ui.collapsing("Lighting", |ui| {
+                    let mesh = self.mesh.as_mut().unwrap();
                     ui.label("Ambient: ");
                     ui.color_edit_button_rgb(&mut mesh.ambient);
                     ui.label("Diffuse: ");
@@ -167,15 +179,12 @@ impl AppState {
             });
         }
     }
-    fn show_alert(&mut self, alert: String) {
-        self.alert = Some(Arc::new(Mutex::new(alert)));
-    }
     fn open_mesh_file(&mut self) {
         if let Some(rfd_result) = rfd::FileDialog::new().pick_file() {
             let input_file = rfd_result.display().to_string();
             self.mesh = match triangle::read_stl_binary(input_file.as_str()) {
                 Err(_) => {
-                    self.show_alert(format!("Could not open file {}", input_file));
+                    self.alert = new_alert(format!("Could not open file {}", input_file));
                     None
                 },
                 Ok(mesh) => {
@@ -193,15 +202,15 @@ impl AppState {
                 let save_file = rfd_result.display().to_string();
                 match triangle::write_stl_binary(save_file.as_str(), &triangles) {
                     Err(err) => {
-                        self.show_alert(format!("Could not save mesh:\n\t{}", err));
+                        self.alert = new_alert(format!("Could not save mesh:\n\t{}", err));
                     },
                     Ok(_) => {
-                        self.show_alert(format!("Saved: {}", save_file));
+                        self.alert = new_alert(format!("Saved: {}", save_file));
                     }
                 }
             }
         } else {
-            self.show_alert("There is no triangle data to save".to_string());
+            self.alert = new_alert("There is no triangle data to save".to_string());
         }
     }
     fn save_render(&mut self, width: usize, height: usize) {
@@ -212,7 +221,7 @@ impl AppState {
         let pixels = match mesh.draw_pixels(width, height) {
             Ok(x) => {x},
             Err(err) => {
-                self.show_alert(format!("Could not render mesh:\n\t{}", err));
+                self.alert = new_alert(format!("Could not render mesh:\n\t{}", err));
                 return
             }
         };
@@ -223,10 +232,10 @@ impl AppState {
             height as u32,
             image::ColorType::Rgba8) {
             Err(err) => {
-                self.show_alert(format!("Could not save mesh:\n\t{}", err));
+                self.alert = new_alert(format!("Could not save mesh:\n\t{}", err));
             },
             Ok(_) => {
-                self.show_alert(format!("Saved: {}", save_file));
+                self.alert = new_alert(format!("Saved: {}", save_file));
             }
         }
     }
