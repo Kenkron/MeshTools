@@ -123,6 +123,12 @@ impl TransformationUI {
                     println!(" {}", i);
                 }
             });
+            ui.label(self.transformations.get(i).map(|x| x.to_string()).unwrap_or("".to_string()));
+            if let Some(selection) = self.selection {
+                if selection == i {
+                    self.transformations[i].ui(ui);
+                }
+            }
             if let Some(i) = removed {
                 self.transformations.remove(i);
                 self.selection = match self.selection {
@@ -138,12 +144,6 @@ impl TransformationUI {
                     None => {None},
                 };
                 continue;
-            }
-            ui.label(self.transformations[i].to_string());
-            if let Some(selection) = self.selection {
-                if selection == i {
-                    self.transformations[i].ui(ui);
-                }
             }
             ui.separator();
         }
